@@ -1,0 +1,119 @@
+#!/usr/bin/env python
+import os, sys, signal
+import logging
+import argparse
+import platform, pkg_resources
+
+if not getattr(sys, 'frozen', False):
+    if os.path.dirname(os.path.realpath(__file__)) == os.getcwd():
+        import imp
+        imp.load_module("chromaclub_gui", *imp.find_module("gui"))
+
+from chromaclub_gui.qt import QtUI
+
+
+def get_default_config_dir():
+    config_dir = "chromaclub"
+    if platform.system() in ('Windows', 'Microsoft'):
+        appDataPath = os.environ.get("APPDATA")
+        if not appDataPath:
+            import _winreg
+            hkey = _winreg.OpenKey(_winreg.HKEY_CURRENT_USER, "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Shell Folders")
+            appDataReg = _winreg.QueryValueEx(hkey, "AppData")
+            appDataPath = appDataReg[0]
+            _winreg.CloseKey(hkey)
+        return os.path.join(appDataPath, config_dir)
+    else:
+        from xdg.BaseDirectory import save_config_path
+        try:
+            return save_config_path(config_dir)
+        except OSError as e:
+            log.error("Unable to use default config directory, exiting... (%s)", e)
+            sys.exit(1)
+
+class VersionAction(argparse.Action):
+    def __call__(self, *args, **kwargs):
+        print("%s: %s" % (os.path.basename(sys.argv[0]), pkg_resources.require('chromaclub')[0].version))
+        try:
+            print("ngcccbase: " + pkg_resources.require('ngcccbase')[0].version)
+        except NotImplementedError:
+            pass
+        raise SystemExit
+
+def get_arg_parser():
+    parser = argparse.ArgumentParser(usage='%(prog)s [command-line options]')
+    parser.add_argument('-v', '--version',
+        action=VersionAction,
+        nargs=0,
+        help="show program's version number and exit"
+    )
+
+    grp_common = parser.add_argument_group("Common options")
+
+    grp_common.add_argument('--testnet',
+        action='store_true',
+        help="Use the test network"
+    )
+    grp_common.add_argument('--datadir',
+        action='store',
+        nargs=1,
+        default=get_default_config_dir(),
+        type=str,
+        metavar='<dir>',
+        help="Specify data directory"
+    )
+    return parser
+
+def setup_logging(level='error', filename=None):
+    _levels = {
+        'critical': logging.CRITICAL,
+        'error': logging.ERROR,
+        'warning': logging.WARNING,
+        'info': logging.INFO,
+        'debug': logging.DEBUG
+    }
+    level = _levels.get(level, _levels['error'])
+
+    logging.basicConfig(
+        format='%(asctime)-15s %(levelname)s %(message)s',
+        level=level,
+        stream=sys.stdout
+    )
+
+    if filename is not None:
+        file_handler = logging.FileHandler(filename)
+        file_handler.setFormatter(
+            logging.Formatter(fmt='%(asctime)-15s %(levelname)s %(message)s'))
+        logging.Logger.root.addHandler(file_handler)
+
+def main():
+    signal.signal(signal.SIGINT, signal.SIG_DFL)
+
+    parser = get_arg_parser()
+    args = vars(parser.parse_args())
+
+    dataDir = args['datadir']
+    if args['testnet']:
+        dataDir = os.path.join(dataDir, 'testnet')
+    if os.path.exists(dataDir) and not os.path.isdir(dataDir):
+        sys.stderr.write('dataDir \'%s\' is not directory\n' % dataDir)
+        sys.stderr.flush()
+        dataDir = '.'
+    if not os.path.exists(dataDir):
+        sys.stderr.write('dataDir \'%s\' not exists\n' % dataDir)
+        sys.stderr.flush()
+        try:
+            os.makedirs(dataDir)
+        except OSError, e:
+            sys.stderr.write(str(e) + '\n')
+            sys.stderr.flush()
+            dataDir = '.'
+    args['datadir'] = dataDir
+
+    setup_logging('info', os.path.join(args['datadir'], "wallet.log"))
+
+    gui = QtUI(args)
+    gui.start()
+
+if __name__ == "__main__":
+    main()

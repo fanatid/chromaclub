@@ -1,0 +1,60 @@
+from PyQt4 import QtCore, QtGui
+
+from chromaclub_gui import clubAsset
+
+
+class Application(QtGui.QApplication):
+    STATUS_REPLENISH = 0
+    STATUS_CONFIRMATION = 1
+    STATUS_WORK = 2
+
+    statusChanged = QtCore.pyqtSignal(int, int, name='changeStatus')
+
+    def __init__(self, args):
+        QtGui.QApplication.__init__(self, [])
+        self.isTestNet = args['testnet']
+        self.dataDir = args['datadir']
+        self._status = None
+
+    def _install_i18n(self):
+        import __builtin__
+        __builtin__.__dict__["_"] = lambda x: x
+
+    def exec_(self):
+        self._install_i18n()
+
+        from wallet import Wallet
+        self.wallet = Wallet(self.dataDir, self.isTestNet)
+        self.wallet.add_asset_definition(clubAsset)
+        self.wallet.balanceUpdated.connect(self._check_status)
+
+        from mainwindow import MainWindow
+        self.mainWindow = MainWindow()
+        self.mainWindow.show()
+
+        self.wallet.sync_start()
+        QtCore.QTimer.singleShot(0, lambda: self._set_new_status(self.STATUS_REPLENISH))
+        retval = super(QtGui.QApplication, self).exec_()
+        self.wallet.sync_stop()
+        return retval
+
+    def _check_status(self):
+        moniker = clubAsset['monikers'][0]
+
+        available_balance = self.wallet.get_available_balance(moniker)
+        unconfirmed_balance = self.wallet.get_unconfirmed_balance(moniker)
+
+        if available_balance > 0:
+            self._set_new_status(self.STATUS_WORK)
+        else:
+            if unconfirmed_balance > 0:
+                self._set_new_status(self.STATUS_CONFIRMATION)
+            else:
+                self._set_new_status(self.STATUS_REPLENISH)
+
+    def _set_new_status(self, status):
+        if self._status == status:
+            return
+        oldStatus = self._status
+        self._status = status
+        self.statusChanged.emit(oldStatus, status)

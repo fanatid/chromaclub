@@ -1,0 +1,8 @@
+venv
+gui/qt/designer
+
+*.pyc
+
+gui/qt/*_ui.py
+gui/qt/icons_rc.py
+

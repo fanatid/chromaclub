@@ -1,0 +1,1 @@
+from club_asset import clubAsset

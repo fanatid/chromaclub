@@ -1,0 +1,8 @@
+<RCC>
+  <qresource prefix="/" >
+    <file>icons/chat.png</file>
+    <file>icons/chromaclub.png</file>
+    <file>icons/exit.png</file>
+    <file>icons/overview.png</file>
+  </qresource>
+</RCC>
