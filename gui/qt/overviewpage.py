@@ -17,12 +17,12 @@ class OverviewPage(QtGui.QWidget, overviewpage_ui.Ui_Form):
 
     def _update_widget(self):
         moniker = clubAsset['monikers'][0]
-        asset = self._wallet.get_asset_definition(moniker)
+        asset = self._wallet.get_asset_definition()
 
-        address = self._wallet.get_all_addresses(moniker)[0]
-        available_balance = self._wallet.get_available_balance(moniker)
-        unconfirmed_balance = self._wallet.get_unconfirmed_balance(moniker)
-        total_balance = self._wallet.get_total_balance(moniker)
+        address = self._wallet.get_address()
+        available_balance = self._wallet.get_available_balance()
+        unconfirmed_balance = self._wallet.get_unconfirmed_balance()
+        total_balance = self._wallet.get_total_balance()
 
         if available_balance > 0:
             self.labelStatus.hide()

@@ -1,50 +1,151 @@
 #!/usr/bin/env python
+import argparse
 import sys
-import json
+import SocketServer, BaseHTTPServer
+import urlparse, json, base64
+import collections
 
-from twisted.internet import reactor
-from twisted.web.resource import Resource
-from twisted.web.server import Site, NOT_DONE_YET
-from twisted.internet import defer
+from ngcccbase.pwallet import PersistentWallet
+from ngcccbase.wallet_controller import WalletController
 
 
-class ChatResource(Resource):
-    isLeaf = True
+class BuildHTTPServer(SocketServer.TCPServer):
+    allow_reuse_address = True
 
-    AVAILABLE_METHODS = {}
+    def __init__(self, params, *args, **kwargs):
+        SocketServer.TCPServer.__init__(self, *args, **kwargs)
+        self.params = params
 
-    def render_POST(self, request):
+
+class MessageStore(object):
+    STORE_SIZE = 100
+
+    def __init__(self):
+        self._store = collections.defaultdict(list)
+
+    def add_message(self, key, message):
+        if len(self._store[key]) > 0:
+            currentId = self._store[key][0][0] + 1
+        else:
+            currentId = 0
+        data = [(currentId, message)]
+        self._store[key] = data + self._store[key][-(self.STORE_SIZE-1):]
+        return json.dumps(True)
+
+    def get_messages(self, key, lastId):
+        if len(self._store[key]) == 0:
+            return json.dumps([])
+
+        data = []
+        for item in self._store[key]:
+            if item[0] <= lastId:
+                break
+            data.append(item)
+        return json.dumps(data[::-1])
+
+messageStore = None
+
+
+class ServerWallet(object):
+    COLOR_SET = ['obc:8e9e04599714547dc8b87d629bc6fd5da011b72c37ef0d4f9d83e986d9285eef:0:258703']
+
+    def __init__(self, isTestNet):
+        self._pwallet = PersistentWallet('wallet.sqlite', isTestNet)
+
+        self._pwallet.wallet_config['testnet'] = isTestNet
+        ccc = self._pwallet.wallet_config.get('ccc', {})
+        ccc['colordb_path'] = 'color_db.sqlite'
+        self._pwallet.wallet_config['ccc'] = ccc
+
+        self._pwallet.init_model()
+        self._wallet = self._pwallet.get_model()
+        self._controller = WalletController(self._wallet)
+
+    def check_request(self, params):
+        print params
+        print self._wallet.ccc.colordata.get_colorvalues(
+            self.COLOR_SET, params['txhash'], params['outindex'])
+
+serverWallet = None
+
+
+class BuildHTTPRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
+    def check_request(self, params):
+        global serverWallet
+        serverWallet.check_request(params)
+        return True
+
+    def add_message(self, params):
+        if not self.check_request(params):
+            return
+        self.send_response(200)
+        self.end_headers()
+        global messageStore
+        self.wfile.write(messageStore.add_message('1', params['data']))
+
+    def get_messages(self, params):
+        if not self.check_request(params):
+            return
+        self.send_response(200)
+        self.end_headers()
+        global messageStore
+        self.wfile.write(messageStore.get_messages('1', params['data']))
+
+    def do_POST(self):
+        length = int(self.headers.getheader('content-length'))
+        data = json.loads(self.rfile.read(length))
         try:
-            query = json.loads(request.content.read())
-        except (ValueError, TypeError):
-            return self._render_error400(request, 'JSON loads error')
-
-        try:
-            if 'method' not in query:
-                raise Exception('method not in request')
-            if 'params' not in query:
-                raise Exception('params not in request')
-            method, params = query['method'], query['params']
-
-            if method not in self.AVAILABLE_METHODS:
-                raise Exception('method not found')
-            if not isinstance(params, dict):
-                raise Exception('params not dict')
+            if data['method'] == 'addmessage':
+                return self.add_message(data['params'])
+            if data['method'] == 'getmessages':
+                return self.get_messages(data['params'])
         except Exception as e:
-            request.setResponseCode(400)
-            return json.dumps({'result': None, 'error': str(e)})
-
-        getattr(self, self.AVAILABLE_METHODS[method])(request, params)
-        return NOT_DONE_YET
+            print(e)
+            raise
+            self.send_response(500)
+            self.end_headers()
+            self.wfile.write(str(e))
+            return
+        self.send_response(400)
+        self.end_headers()
 
 
 def main():
-    host, port = '', 28832
-    if len(sys.argv) == 3:
-        host, port = sys.argv[1], int(sys.argv[2])
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--port',
+        action='store',
+        default=28833,
+        type=int,
+        help="Server port (default: 28832)",
+        metavar='port',
+        dest='PORT'
+    )
+    parser.add_argument('--host',
+        action='store',
+        default='localhost',
+        type=str,
+        help="Server host (default: localhost)",
+        metavar='host',
+        dest='HOST'
+    )
+    parser.add_argument('--testnet',
+        action='store',
+        default=False,
+        type=bool,
+        dest='testnet'
+    )
+    args = parser.parse_args()
 
-    reactor.listenTCP(port, Site(ChatResource()), interface=host)
-    reactor.run()
+    global messageStore, serverWallet
+    messageStore = MessageStore()
+    serverWallet = ServerWallet(args.testnet)
+
+    server = BuildHTTPServer(args, (args.HOST, args.PORT), BuildHTTPRequestHandler)
+    try:
+        server.serve_forever()
+    except:
+        pass
+    server.server_close()
 
 if __name__ == "__main__":
     main()

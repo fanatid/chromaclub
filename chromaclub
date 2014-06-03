@@ -9,11 +9,12 @@ if not getattr(sys, 'frozen', False):
         import imp
         imp.load_module("chromaclub_gui", *imp.find_module("gui"))
 
+from chromaclub_gui import clubAsset
 from chromaclub_gui.qt import QtUI
 
 
 def get_default_config_dir():
-    config_dir = "chromaclub"
+    config_dir = "chromaclub-" + clubAsset['monikers'][0]
     if platform.system() in ('Windows', 'Microsoft'):
         appDataPath = os.environ.get("APPDATA")
         if not appDataPath:

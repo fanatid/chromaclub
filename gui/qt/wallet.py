@@ -1,4 +1,7 @@
 import os
+import threading
+import string
+import random
 
 from PyQt4 import QtCore
 
@@ -8,12 +11,16 @@ from ngcccbase.asset import AssetDefinition
 from ngcccbase.utxo_fetcher import AsyncUTXOFetcher
 from ngcccbase.txdb import BaseTxDb
 
+from chromaclub_gui import clubAsset
+
 
 class Wallet(QtCore.QObject):
     balanceUpdated = QtCore.pyqtSignal(name='balanceUpdated')
 
     def __init__(self, dataDir, isTestNet):
         QtCore.QObject.__init__(self)
+
+        self.lock = threading.Lock()
 
         self._patching_BaseTxDb()
 
@@ -28,6 +35,8 @@ class Wallet(QtCore.QObject):
         self._utxo_fetcher_timer = QtCore.QTimer()
         self._utxo_fetcher_timer.timeout.connect(self._utxo_fetcher.update)
         self._utxo_fetcher_timer.setInterval(1000)
+
+        self._create_club_asset()
 
     def _patching_BaseTxDb(self):
         original_add_tx = BaseTxDb.add_tx
@@ -67,6 +76,16 @@ class Wallet(QtCore.QObject):
         ccc['colordb_path'] = os.path.join(dataDir, 'color_db.sqlite')
         self._pwallet.wallet_config['ccc'] = ccc
 
+    def _create_club_asset(self):
+        for asset in self._wallet.get_asset_definition_manager().get_all_assets():
+            for color in asset.get_color_set().get_data():
+                if color in clubAsset['color_set']:
+                    return
+        self._wallet.get_asset_definition_manager().add_asset_definition(clubAsset)
+        asset = self.get_asset_definition()
+        if len(self._controller.get_all_addresses(asset)) == 0:
+            self._controller.get_new_address(asset).get_color_address()
+
     def sync_start(self):
         self._utxo_fetcher.start_thread()
         self._utxo_fetcher_timer.start()
@@ -75,49 +94,46 @@ class Wallet(QtCore.QObject):
         self._utxo_fetcher.stop()
         self._utxo_fetcher_timer.stop()
 
-    def get_model(self):
-        return self._wallet
 
-    def get_asset_definition(self, moniker):
-        if isinstance(moniker, AssetDefinition):
-            return moniker
+    def get_asset_definition(self):
+        moniker = clubAsset['monikers'][0]
         adm = self._wallet.get_asset_definition_manager()
-        asset = adm.get_asset_by_moniker(moniker)
-        if not asset:
-            raise Exception("asset not found")
-        return asset
+        return adm.get_asset_by_moniker(moniker)
 
-    def get_all_monikers(self):
-        assets = self._wallet.get_asset_definition_manager().get_all_assets()
-        return sum([asset.get_monikers() for asset in assets], [])
+    def get_address(self):
+        asset = self.get_asset_definition()
+        return self._controller.get_all_addresses(asset)[0].get_color_address()
 
-    def get_all_addresses(self, moniker):
-        asset = self.get_asset_definition(moniker)
-        return [addr.get_color_address()
-                for addr in self._controller.get_all_addresses(asset)]
+    def get_total_balance(self):
+        return self._controller.get_total_balance(self.get_asset_definition())
 
-    def add_asset_definition(self, params):
-        for asset in self._wallet.get_asset_definition_manager().get_all_assets():
-            for color in asset.get_color_set().get_data():
-                if color in params['color_set']:
-                    return
-        self._wallet.get_asset_definition_manager().add_asset_definition(params)
-        assdef = self.get_asset_definition(params['monikers'][0])
-        if len(self._controller.get_all_addresses(assdef)) == 0:
-            self.create_new_address(params['monikers'][0])
+    def get_available_balance(self):
+        return self._controller.get_available_balance(self.get_asset_definition())
 
-    def create_new_address(self, moniker):
-        asset = self.get_asset_definition(moniker)
-        self._controller.get_new_address(asset).get_color_address()
+    def get_unconfirmed_balance(self):
+        return self._controller.get_unconfirmed_balance(self.get_asset_definition())
 
-    def get_total_balance(self, moniker):
-        asset = self.get_asset_definition(moniker)
-        return self._controller.get_total_balance(asset)
+    def get_auth_data(self):
+        with self.lock:
+            coin = self._wallet.make_coin_query({
+                'asset': self.get_asset_definition(),
+                'spent': False,
+            }).get_result()[0]
+            return {
+                'txhash': coin.txhash,
+                'outindex': coin.outindex,
+                'pubkey': coin.address_rec.rawPubkey(),
+                'address_rec': coin.address_rec,
+            }
 
-    def get_available_balance(self, moniker):
-        asset = self.get_asset_definition(moniker)
-        return self._controller.get_available_balance(asset)
+    def sign_data(self, data):
+        with self.lock:
+            symbols_set = string.ascii_letters + string.digits
+            salt = ''.join([random.choice(symbols_set) for _ in xrange(20)])
 
-    def get_unconfirmed_balance(self, moniker):
-        asset = self.get_asset_definition(moniker)
-        return self._controller.get_unconfirmed_balance(asset)
+            # Todo: str(data)
+
+            return {
+                'salt': salt,
+                'sign': '',
+            }

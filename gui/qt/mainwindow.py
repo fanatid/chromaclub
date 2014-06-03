@@ -47,7 +47,7 @@ class MainWindow(QtGui.QMainWindow):
         self._create_tray_icon()
         self._create_tray_icon_menu()
 
-        self._app.statusChanged.connect(self.change_status)
+        self._app.statusChanged.connect(self._status_changed)
 
     def _create_actions(self):
         tabGroup = QtGui.QActionGroup(self)
@@ -133,12 +133,8 @@ class MainWindow(QtGui.QMainWindow):
         elif toggleHidden:
             self.hide()
 
-    def change_status(self, oldStatus, newStatus):
+    def _status_changed(self, oldStatus, newStatus):
         if newStatus == self._app.STATUS_WORK:
             self.toolBar.show()
         else:
             self.toolBar.hide()
-
-    def closeEvent(self, event):
-        QtCore.QTimer.singleShot(0, self.hide)
-        event.ignore()

@@ -1,7 +1,5 @@
 from PyQt4 import QtCore, QtGui
 
-from chromaclub_gui import clubAsset
-
 
 class Application(QtGui.QApplication):
     STATUS_REPLENISH = 0
@@ -25,7 +23,6 @@ class Application(QtGui.QApplication):
 
         from wallet import Wallet
         self.wallet = Wallet(self.dataDir, self.isTestNet)
-        self.wallet.add_asset_definition(clubAsset)
         self.wallet.balanceUpdated.connect(self._check_status)
 
         from mainwindow import MainWindow
@@ -33,16 +30,19 @@ class Application(QtGui.QApplication):
         self.mainWindow.show()
 
         self.wallet.sync_start()
-        QtCore.QTimer.singleShot(0, lambda: self._set_new_status(self.STATUS_REPLENISH))
+        QtCore.QTimer.singleShot(0, self._check_status)
+        # Todo: remove
+        #self.mainWindow.chatAction.trigger()
+        #self.mainWindow.chatpage.chatMessage.setText('new message')
+        # ----
         retval = super(QtGui.QApplication, self).exec_()
+        self.mainWindow.chatpage.sync_stop()
         self.wallet.sync_stop()
         return retval
 
     def _check_status(self):
-        moniker = clubAsset['monikers'][0]
-
-        available_balance = self.wallet.get_available_balance(moniker)
-        unconfirmed_balance = self.wallet.get_unconfirmed_balance(moniker)
+        available_balance = self.wallet.get_available_balance()
+        unconfirmed_balance = self.wallet.get_unconfirmed_balance()
 
         if available_balance > 0:
             self._set_new_status(self.STATUS_WORK)
