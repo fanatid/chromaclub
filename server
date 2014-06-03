@@ -5,6 +5,14 @@ import SocketServer, BaseHTTPServer
 import urlparse, json, base64
 import collections
 
+from pycoin import ecdsa
+from pycoin.encoding import sec_to_public_pair, hash160, public_pair_to_bitcoin_address
+
+from coloredcoinlib.blockchain import script_to_raw_address
+from ngcccbase.pwallet import PersistentWallet
+from ngcccbase.wallet_controller import WalletController
+from ngcccbase import pycoin_txcons
+
 
 class BuildHTTPServer(SocketServer.TCPServer):
     allow_reuse_address = True
@@ -20,12 +28,12 @@ class MessageStore(object):
     def __init__(self):
         self._store = collections.defaultdict(list)
 
-    def add_message(self, key, message):
+    def add_message(self, key, address, message):
         if len(self._store[key]) > 0:
             currentId = self._store[key][0][0] + 1
         else:
             currentId = 0
-        data = [(currentId, message)]
+        data = [(currentId, address, message)]
         self._store[key] = data + self._store[key][-(self.STORE_SIZE-1):]
         return json.dumps(True)
 
@@ -45,8 +53,7 @@ messageStore = None
 
 class ServerWallet(object):
     def __init__(self, isTestNet):
-        from ngcccbase.pwallet import PersistentWallet
-        from ngcccbase.wallet_controller import WalletController
+        self._isTestNet = isTestNet
 
         self._pwallet = PersistentWallet('wallet.sqlite', isTestNet)
 
@@ -60,11 +67,6 @@ class ServerWallet(object):
         self._controller = WalletController(self._wallet)
 
     def check_request(self, params):
-        #print params
-        from coloredcoinlib.blockchain import script_to_raw_address
-        from ngcccbase import pycoin_txcons
-        from pycoin.encoding import hash160
-
         color_id = self._wallet.ccc.colormap.resolve_color_desc(params['color_set'])
         values = self._wallet.ccc.colordata.get_colorvalues(
             [color_id], params['txhash'], params['outindex'])
@@ -73,9 +75,13 @@ class ServerWallet(object):
         tx_data = self._wallet.get_blockchain_state().get_raw(params['txhash'])
         pycoin_tx = pycoin_txcons.deserialize(tx_data.decode('hex'))
         tx_out = pycoin_tx.txs_out[params['outindex']]
-        assert script_to_raw_address(tx_out.script) != hash160(params['pubkey'])
+        assert script_to_raw_address(tx_out.script) == hash160(params['pubkey'].decode('hex'))
 
-        
+        publicPair = sec_to_public_pair(params['pubkey'].decode('hex'))
+        data = int((hash160(str(params['data']) + params['sign']['salt'])).encode('hex'), 16)
+        assert ecdsa.verify(ecdsa.generator_secp256k1, publicPair, data, params['sign']['sign']) == True
+
+        return public_pair_to_bitcoin_address(publicPair, compressed=False, is_test=self._isTestNet)
 
 serverWallet = None
 
@@ -83,10 +89,10 @@ serverWallet = None
 class BuildHTTPRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     def add_message(self, params):
         global serverWallet, messageStore
-        serverWallet.check_request(params)
+        address = serverWallet.check_request(params)
         self.send_response(200)
         self.end_headers()
-        self.wfile.write(messageStore.add_message(params['color_set'], params['data']))
+        self.wfile.write(messageStore.add_message(params['color_set'], address, params['data']))
 
     def get_messages(self, params):
         global serverWallet, messageStore
@@ -104,6 +110,8 @@ class BuildHTTPRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             if data['method'] == 'getmessages':
                 return self.get_messages(data['params'])
         except Exception as e:
+            import traceback
+            traceback.print_exc()
             print(e)
             self.send_response(500)
             self.end_headers()

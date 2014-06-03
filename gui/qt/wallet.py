@@ -5,7 +5,8 @@ import random
 
 from PyQt4 import QtCore
 
-from pycoin.encoding import public_pair_to_sec
+from pycoin import ecdsa
+from pycoin.encoding import public_pair_to_sec, hash160
 
 from ngcccbase.pwallet import PersistentWallet
 from ngcccbase.wallet_controller import WalletController
@@ -106,6 +107,10 @@ class Wallet(QtCore.QObject):
         asset = self.get_asset_definition()
         return self._controller.get_all_addresses(asset)[0].get_color_address()
 
+    def get_bitcoin_address(self):
+        asset = self.get_asset_definition()
+        return self._controller.get_all_addresses(asset)[0].get_address()
+
     def get_total_balance(self):
         return self._controller.get_total_balance(self.get_asset_definition())
 
@@ -122,25 +127,21 @@ class Wallet(QtCore.QObject):
                 'spent': False,
             }).get_result()[0]
             pubKey = public_pair_to_sec(coin.address_rec.publicPoint.pair(), compressed=False)
-            #
-            print coin.address_rec.get_private_key()
-            #
             return {
                 'color_set':   clubAsset['color_set'][0],
                 'txhash':      coin.txhash,
                 'outindex':    coin.outindex,
                 'pubkey':      pubKey.encode('hex'),
+                'privkey':     coin.address_rec.rawPrivKey,
                 'address_rec': coin.address_rec,
             }
 
-    def sign_data(self, data):
+    def sign_data(self, data, privKey):
         with self.lock:
             symbols_set = string.ascii_letters + string.digits
             salt = ''.join([random.choice(symbols_set) for _ in xrange(20)])
-
-            # Todo: str(data)
-
+            data = int((hash160(str(data) + salt)).encode('hex'), 16)
             return {
                 'salt': salt,
-                'sign': '',
+                'sign': ecdsa.sign(ecdsa.generator_secp256k1, privKey, data),
             }

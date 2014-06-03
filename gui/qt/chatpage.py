@@ -55,7 +55,7 @@ class MessageWatcher(threading.Thread):
                 'outindex':  auth_data['outindex'],
                 'pubkey':    auth_data['pubkey'],
                 'data':      data['message'],
-                'signature': self._wallet.sign_data(data['message']),
+                'sign':      self._wallet.sign_data(data['message'], auth_data['privkey']),
             })
         except Queue.Empty:
             pass
@@ -66,7 +66,7 @@ class MessageWatcher(threading.Thread):
             'outindex':  auth_data['outindex'],
             'pubkey':    auth_data['pubkey'],
             'data':      self._lastId,
-            'signature': self._wallet.sign_data(self._lastId),
+            'sign':      self._wallet.sign_data(self._lastId, auth_data['privkey']),
         })
         if not data:
             return
@@ -74,7 +74,8 @@ class MessageWatcher(threading.Thread):
         for item in data:
             self._lastId = item[0]
             self.rxQ.put({
-                'message': item[1]
+                'address': item[1],
+                'message': item[2],
             })
 
     def run(self):
@@ -135,8 +136,11 @@ class ChatPage(QtGui.QWidget, chatpage_ui.Ui_Form):
         try:
             while True:
                 item = self._watcher.rxQ.get_nowait()
+                address = item['address']
+                if address == self._wallet.get_bitcoin_address():
+                    address = '<b>%s</b>' % address
                 text = item['message']
-                self.chatField.append('<html><body>%s</body></html>' % text)
+                self.chatField.append('<html><body>%s: %s</body></html>' % (address, text,))
         except Queue.Empty:
             pass
 

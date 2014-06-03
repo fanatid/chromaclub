@@ -31,10 +31,6 @@ class Application(QtGui.QApplication):
 
         self.wallet.sync_start()
         QtCore.QTimer.singleShot(0, self._check_status)
-        # Todo: remove
-        #self.mainWindow.chatAction.trigger()
-        #self.mainWindow.chatpage.chatMessage.setText('new message')
-        # ----
         retval = super(QtGui.QApplication, self).exec_()
         self.mainWindow.chatpage.sync_stop()
         self.wallet.sync_stop()
