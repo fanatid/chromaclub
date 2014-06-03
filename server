@@ -5,9 +5,6 @@ import SocketServer, BaseHTTPServer
 import urlparse, json, base64
 import collections
 
-from ngcccbase.pwallet import PersistentWallet
-from ngcccbase.wallet_controller import WalletController
-
 
 class BuildHTTPServer(SocketServer.TCPServer):
     allow_reuse_address = True
@@ -47,9 +44,10 @@ messageStore = None
 
 
 class ServerWallet(object):
-    COLOR_SET = ['obc:8e9e04599714547dc8b87d629bc6fd5da011b72c37ef0d4f9d83e986d9285eef:0:258703']
-
     def __init__(self, isTestNet):
+        from ngcccbase.pwallet import PersistentWallet
+        from ngcccbase.wallet_controller import WalletController
+
         self._pwallet = PersistentWallet('wallet.sqlite', isTestNet)
 
         self._pwallet.wallet_config['testnet'] = isTestNet
@@ -62,34 +60,40 @@ class ServerWallet(object):
         self._controller = WalletController(self._wallet)
 
     def check_request(self, params):
-        print params
-        print self._wallet.ccc.colordata.get_colorvalues(
-            self.COLOR_SET, params['txhash'], params['outindex'])
+        #print params
+        from coloredcoinlib.blockchain import script_to_raw_address
+        from ngcccbase import pycoin_txcons
+        from pycoin.encoding import hash160
+
+        color_id = self._wallet.ccc.colormap.resolve_color_desc(params['color_set'])
+        values = self._wallet.ccc.colordata.get_colorvalues(
+            [color_id], params['txhash'], params['outindex'])
+        assert values != []
+
+        tx_data = self._wallet.get_blockchain_state().get_raw(params['txhash'])
+        pycoin_tx = pycoin_txcons.deserialize(tx_data.decode('hex'))
+        tx_out = pycoin_tx.txs_out[params['outindex']]
+        assert script_to_raw_address(tx_out.script) != hash160(params['pubkey'])
+
+        
 
 serverWallet = None
 
 
 class BuildHTTPRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
-    def check_request(self, params):
-        global serverWallet
-        serverWallet.check_request(params)
-        return True
-
     def add_message(self, params):
-        if not self.check_request(params):
-            return
+        global serverWallet, messageStore
+        serverWallet.check_request(params)
         self.send_response(200)
         self.end_headers()
-        global messageStore
-        self.wfile.write(messageStore.add_message('1', params['data']))
+        self.wfile.write(messageStore.add_message(params['color_set'], params['data']))
 
     def get_messages(self, params):
-        if not self.check_request(params):
-            return
+        global serverWallet, messageStore
+        serverWallet.check_request(params)
         self.send_response(200)
         self.end_headers()
-        global messageStore
-        self.wfile.write(messageStore.get_messages('1', params['data']))
+        self.wfile.write(messageStore.get_messages(params['color_set'], params['data']))
 
     def do_POST(self):
         length = int(self.headers.getheader('content-length'))
@@ -101,7 +105,6 @@ class BuildHTTPRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
                 return self.get_messages(data['params'])
         except Exception as e:
             print(e)
-            raise
             self.send_response(500)
             self.end_headers()
             self.wfile.write(str(e))

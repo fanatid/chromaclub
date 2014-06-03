@@ -5,6 +5,8 @@ import random
 
 from PyQt4 import QtCore
 
+from pycoin.encoding import public_pair_to_sec
+
 from ngcccbase.pwallet import PersistentWallet
 from ngcccbase.wallet_controller import WalletController
 from ngcccbase.asset import AssetDefinition
@@ -119,10 +121,15 @@ class Wallet(QtCore.QObject):
                 'asset': self.get_asset_definition(),
                 'spent': False,
             }).get_result()[0]
+            pubKey = public_pair_to_sec(coin.address_rec.publicPoint.pair(), compressed=False)
+            #
+            print coin.address_rec.get_private_key()
+            #
             return {
-                'txhash': coin.txhash,
-                'outindex': coin.outindex,
-                'pubkey': coin.address_rec.rawPubkey(),
+                'color_set':   clubAsset['color_set'][0],
+                'txhash':      coin.txhash,
+                'outindex':    coin.outindex,
+                'pubkey':      pubKey.encode('hex'),
                 'address_rec': coin.address_rec,
             }
 

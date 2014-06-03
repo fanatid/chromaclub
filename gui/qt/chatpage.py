@@ -50,9 +50,10 @@ class MessageWatcher(threading.Thread):
         try:
             data = self.txQ.get_nowait()
             self._make_request('addmessage', {
+                'color_set': auth_data['color_set'],
                 'txhash':    auth_data['txhash'],
                 'outindex':  auth_data['outindex'],
-                'pubkey':    auth_data['pubkey'].encode('hex'),
+                'pubkey':    auth_data['pubkey'],
                 'data':      data['message'],
                 'signature': self._wallet.sign_data(data['message']),
             })
@@ -60,9 +61,10 @@ class MessageWatcher(threading.Thread):
             pass
 
         data = self._make_request('getmessages', {
+            'color_set': auth_data['color_set'],
             'txhash':    auth_data['txhash'],
             'outindex':  auth_data['outindex'],
-            'pubkey':    auth_data['pubkey'].encode('hex'),
+            'pubkey':    auth_data['pubkey'],
             'data':      self._lastId,
             'signature': self._wallet.sign_data(self._lastId),
         })
@@ -108,17 +110,6 @@ class ChatPage(QtGui.QWidget, chatpage_ui.Ui_Form):
         self._newMessageWatcher = QtCore.QTimer()
         self._newMessageWatcher.setInterval(50)
         self._newMessageWatcher.timeout.connect(self._check_new_messages)
-
-        # Todo: remove
-        return
-        auth_data = self._wallet.get_auth_data()
-        data = self._wallet._wallet.ccc.colordata.get_colorvalues(
-            ['obc:8e9e04599714547dc8b87d629bc6fd5da011b72c37ef0d4f9d83e986d9285eef:0:258703'],
-            'd40d292e4c14017d1dc6066de93d624d9e0176d830497f3ab5bc704e2c147b5a',
-            0
-        )
-        print '!'*80
-        print data
 
     def on_sendButton_clicked(self, checked=None):
         if checked is None:
