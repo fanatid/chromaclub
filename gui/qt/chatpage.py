@@ -112,6 +112,9 @@ class ChatPage(QtGui.QWidget, chatpage_ui.Ui_Form):
         self._newMessageWatcher.setInterval(50)
         self._newMessageWatcher.timeout.connect(self._check_new_messages)
 
+    def on_chatMessage_returnPressed(self):
+        self.sendButton.click()
+
     def on_sendButton_clicked(self, checked=None):
         if checked is None:
             return
