@@ -8,7 +8,9 @@ import collections
 from pycoin import ecdsa
 from pycoin.encoding import sec_to_public_pair, hash160, public_pair_to_bitcoin_address
 
+from coloredcoinlib import BlockchainState
 from coloredcoinlib.blockchain import script_to_raw_address
+
 from ngcccbase.pwallet import PersistentWallet
 from ngcccbase.wallet_controller import WalletController
 from ngcccbase import pycoin_txcons
@@ -65,12 +67,15 @@ class ServerWallet(object):
         self._pwallet.init_model()
         self._wallet = self._pwallet.get_model()
         self._controller = WalletController(self._wallet)
+        self._bitcoind = BlockchainState.from_url(None, isTestNet)
 
     def check_request(self, params):
         color_id = self._wallet.ccc.colormap.resolve_color_desc(params['color_set'])
         values = self._wallet.ccc.colordata.get_colorvalues(
             [color_id], params['txhash'], params['outindex'])
         assert values != []
+
+        assert self._bitcoind.bitcoind.gettxout(params['txhash'], params['outindex'], True) is not None
 
         tx_data = self._wallet.get_blockchain_state().get_raw(params['txhash'])
         pycoin_tx = pycoin_txcons.deserialize(tx_data.decode('hex'))
@@ -140,9 +145,7 @@ def main():
         dest='HOST'
     )
     parser.add_argument('--testnet',
-        action='store',
-        default=False,
-        type=bool,
+        action='store_true',
         dest='testnet'
     )
     args = parser.parse_args()
