@@ -10,6 +10,8 @@ from chromaclub_gui import clubAsset
 from application import Application
 import chatpage_ui
 
+from chromaclub_gui import clubAsset
+
 
 class MessageWatcher(threading.Thread):
     SERVICE_URL = "http://localhost:28833/"
@@ -45,7 +47,7 @@ class MessageWatcher(threading.Thread):
             raise
 
     def _run_once(self):
-        auth_data = self._wallet.get_auth_data()
+        auth_data = self._wallet.get_auth_data(clubAsset['monikers'][0])
 
         try:
             data = self.txQ.get_nowait()
@@ -140,7 +142,7 @@ class ChatPage(QtGui.QWidget, chatpage_ui.Ui_Form):
             while True:
                 item = self._watcher.rxQ.get_nowait()
                 address = item['address']
-                if address == self._wallet.get_bitcoin_address():
+                if address == self._wallet.get_bitcoin_address(clubAsset['monikers'][0]):
                     address = '<b>%s</b>' % address
                 text = item['message']
                 self.chatField.append('<html><body>%s: %s</body></html>' % (address, text,))

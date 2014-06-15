@@ -2,7 +2,9 @@
   <qresource prefix="/" >
     <file>icons/chat.png</file>
     <file>icons/chromaclub.png</file>
+    <file>icons/chromawallet.png</file>
     <file>icons/exit.png</file>
     <file>icons/overview.png</file>
+    <file>icons/send.png</file>
   </qresource>
 </RCC>

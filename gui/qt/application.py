@@ -1,5 +1,7 @@
 from PyQt4 import QtCore, QtGui
 
+from chromaclub_gui import clubAsset
+
 
 class Application(QtGui.QApplication):
     STATUS_REPLENISH = 0
@@ -37,8 +39,9 @@ class Application(QtGui.QApplication):
         return retval
 
     def _check_status(self):
-        available_balance = self.wallet.get_available_balance()
-        unconfirmed_balance = self.wallet.get_unconfirmed_balance()
+        moniker = clubAsset['monikers'][0]
+        available_balance = self.wallet.get_available_balance(moniker)
+        unconfirmed_balance = self.wallet.get_unconfirmed_balance(moniker)
 
         if available_balance > 0:
             self._set_new_status(self.STATUS_WORK)

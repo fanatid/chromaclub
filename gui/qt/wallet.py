@@ -2,11 +2,12 @@ import os
 import threading
 import string
 import random
+from hashlib import sha256
 
 from PyQt4 import QtCore
 
 from pycoin import ecdsa
-from pycoin.encoding import public_pair_to_sec, hash160
+from pycoin.encoding import public_pair_to_sec, hash160, a2b_base58
 
 from ngcccbase.pwallet import PersistentWallet
 from ngcccbase.wallet_controller import WalletController
@@ -27,7 +28,8 @@ class Wallet(QtCore.QObject):
 
         self._patching_BaseTxDb()
 
-        self._pwallet = PersistentWallet(os.path.join(dataDir, 'wallet.sqlite'), isTestNet)
+        self.wallet_path = os.path.join(dataDir, 'wallet.sqlite')
+        self._pwallet = PersistentWallet(self.wallet_path, isTestNet)
         self._set_wallet_settings(dataDir, isTestNet)
         self._pwallet.init_model()
         self._wallet = self._pwallet.get_model()
@@ -38,6 +40,10 @@ class Wallet(QtCore.QObject):
         self._utxo_fetcher_timer = QtCore.QTimer()
         self._utxo_fetcher_timer.timeout.connect(self._utxo_fetcher.update)
         self._utxo_fetcher_timer.setInterval(1000)
+
+        asset = self.get_asset_definition('bitcoin')
+        if len(self._controller.get_all_addresses(asset)) == 0:
+            self._controller.get_new_address(asset)
 
         self._create_club_asset()
 
@@ -85,7 +91,7 @@ class Wallet(QtCore.QObject):
                 if color in clubAsset['color_set']:
                     return
         self._wallet.get_asset_definition_manager().add_asset_definition(clubAsset)
-        asset = self.get_asset_definition()
+        asset = self.get_asset_definition(clubAsset['monikers'][0])
         if len(self._controller.get_all_addresses(asset)) == 0:
             self._controller.get_new_address(asset).get_color_address()
 
@@ -97,33 +103,44 @@ class Wallet(QtCore.QObject):
         self._utxo_fetcher.stop()
         self._utxo_fetcher_timer.stop()
 
-
-    def get_asset_definition(self):
-        moniker = clubAsset['monikers'][0]
+    def get_asset_definition(self, moniker):
+        if isinstance(moniker, AssetDefinition):
+            return moniker
         adm = self._wallet.get_asset_definition_manager()
-        return adm.get_asset_by_moniker(moniker)
+        asset = adm.get_asset_by_moniker(moniker)
+        if not asset:
+            raise Exception("asset not found")
+        return asset
 
-    def get_address(self):
-        asset = self.get_asset_definition()
+    def get_address(self, moniker):
+        asset = self.get_asset_definition(moniker)
         return self._controller.get_all_addresses(asset)[0].get_color_address()
 
-    def get_bitcoin_address(self):
-        asset = self.get_asset_definition()
+    def get_bitcoin_address(self, moniker):
+        asset = self.get_asset_definition(moniker)
         return self._controller.get_all_addresses(asset)[0].get_address()
 
-    def get_total_balance(self):
-        return self._controller.get_total_balance(self.get_asset_definition())
+    def get_total_balance(self, moniker):
+        asset = self.get_asset_definition(moniker)
+        return self._controller.get_total_balance(asset)
 
-    def get_available_balance(self):
-        return self._controller.get_available_balance(self.get_asset_definition())
+    def get_available_balance(self, moniker):
+        asset = self.get_asset_definition(moniker)
+        return self._controller.get_available_balance(asset)
 
-    def get_unconfirmed_balance(self):
-        return self._controller.get_unconfirmed_balance(self.get_asset_definition())
+    def get_unconfirmed_balance(self, moniker):
+        asset = self.get_asset_definition(moniker)
+        return self._controller.get_unconfirmed_balance(asset)
 
-    def get_auth_data(self):
+    def send_coins(self, moniker, address):
+        asset = self.get_asset_definition(moniker)
+        total = self.get_total_balance(asset)
+        self._controller.send_coins(asset, [address], [total])
+
+    def get_auth_data(self, moniker):
         with self.lock:
             coin = self._wallet.make_coin_query({
-                'asset': self.get_asset_definition(),
+                'asset': self.get_asset_definition(moniker),
                 'spent': False,
             }).get_result()[0]
             pubKey = public_pair_to_sec(coin.address_rec.publicPoint.pair(), compressed=False)
@@ -145,3 +162,7 @@ class Wallet(QtCore.QObject):
                 'salt': salt,
                 'sign': ecdsa.sign(ecdsa.generator_secp256k1, privKey, data),
             }
+
+    def validate_bitcoin_address(self, address):
+        bcbytes = a2b_base58(str(address))
+        return bcbytes[-4:] == sha256(sha256(bcbytes[:-4]).digest()).digest()[:4]

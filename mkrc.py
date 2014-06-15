@@ -9,6 +9,7 @@ def main():
     system('pyrcc4 icons.qrc -o gui/qt/icons_rc.py')
 
     system('pyuic4 gui/qt/designer/overviewpage.ui -o gui/qt/overviewpage_ui.py')
+    system('pyuic4 gui/qt/designer/sendpage.ui     -o gui/qt/sendpage_ui.py')
     system('pyuic4 gui/qt/designer/chatpage.ui     -o gui/qt/chatpage_ui.py')
 
 

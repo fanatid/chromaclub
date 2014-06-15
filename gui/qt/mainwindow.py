@@ -1,8 +1,11 @@
+import os
+
 from PyQt4 import QtCore, QtGui
 
 from chromaclub_gui import clubAsset
 from application import Application
 from overviewpage import OverviewPage
+from sendpage import SendPage
 from chatpage import ChatPage
 
 
@@ -36,8 +39,10 @@ class MainWindow(QtGui.QMainWindow):
         self.setCentralWidget(QtGui.QStackedWidget())
 
         self.overviewpage = OverviewPage(self)
+        self.sendpage = SendPage(self)
         self.chatpage = ChatPage(self)
         self.centralWidget().addWidget(self.overviewpage)
+        self.centralWidget().addWidget(self.sendpage)
         self.centralWidget().addWidget(self.chatpage)
 
         self._create_actions()
@@ -62,6 +67,15 @@ class MainWindow(QtGui.QMainWindow):
             self.centralWidget().setCurrentWidget(self.overviewpage))
         tabGroup.addAction(self.overviewAction)
 
+        self.sendAction = QtGui.QAction(QtGui.QIcon(':icons/send.png'), _("&Send"), self)
+        self.sendAction.setStatusTip(_("Send coins to another address"))
+        self.sendAction.setToolTip(self.sendAction.statusTip())
+        self.sendAction.setCheckable(True)
+        self.sendAction.triggered.connect(self.show_normal_if_minimized)
+        self.sendAction.triggered.connect(lambda:
+            self.centralWidget().setCurrentWidget(self.sendpage))
+        tabGroup.addAction(self.sendAction)
+
         self.chatAction = QtGui.QAction(QtGui.QIcon(':icons/chat.png'), _("&Chat"), self)
         self.chatAction.setStatusTip(_("Show chromaclub chat"))
         self.chatAction.setToolTip(self.chatAction.statusTip())
@@ -70,6 +84,12 @@ class MainWindow(QtGui.QMainWindow):
         self.chatAction.triggered.connect(lambda:
             self.centralWidget().setCurrentWidget(self.chatpage))
         tabGroup.addAction(self.chatAction)
+
+        self.openChromaWalletAction = QtGui.QAction(
+            QtGui.QIcon(':icons/chromawallet.png'), _("Open current wallet in ChromaWallet"), self)
+        self.openChromaWalletAction.setStatusTip(_("Open current wallet in ChromaWallet"))
+        self.openChromaWalletAction.setToolTip(self.openChromaWalletAction.statusTip())
+        self.openChromaWalletAction.triggered.connect(self._open_chromawallet)
 
         self.quitAction = QtGui.QAction(QtGui.QIcon(':icons/exit.png'), _("E&xit"), self)
         self.quitAction.setStatusTip(_("Quit application"))
@@ -87,6 +107,8 @@ class MainWindow(QtGui.QMainWindow):
         menuBar = self.menuBar()
 
         file = menuBar.addMenu(_("&File"))
+        file.addAction(self.openChromaWalletAction)
+        file.addSeparator()
         file.addAction(self.quitAction)
 
     def _create_tool_bar(self):
@@ -95,6 +117,7 @@ class MainWindow(QtGui.QMainWindow):
         toolBar.setToolButtonStyle(QtCore.Qt.ToolButtonTextBesideIcon)
 
         toolBar.addAction(self.overviewAction)
+        toolBar.addAction(self.sendAction)
         toolBar.addAction(self.chatAction)
 
     def _create_status_bar(self):
@@ -138,3 +161,15 @@ class MainWindow(QtGui.QMainWindow):
             self.toolBar.show()
         else:
             self.toolBar.hide()
+            self.overviewAction.trigger()
+
+    def _open_chromawallet(self, checked=None):
+        if checked is None:
+            return
+
+        app = 'chromawallet'
+        if os.name == 'nt':
+            app += '.exe'
+
+        os.system('%s --wallet=%s' % (app, self._app.wallet.wallet_path))
+        #self.quitAction.trigger()

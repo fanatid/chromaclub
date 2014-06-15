@@ -73,18 +73,22 @@ class ServerWallet(object):
         color_id = self._wallet.ccc.colormap.resolve_color_desc(params['color_set'])
         values = self._wallet.ccc.colordata.get_colorvalues(
             [color_id], params['txhash'], params['outindex'])
-        assert values != []
+        if values == []:
+            raise Exception('get_colorvalues')
 
-        assert self._bitcoind.bitcoind.gettxout(params['txhash'], params['outindex'], True) is not None
+        if self._bitcoind.bitcoind.gettxout(params['txhash'], params['outindex'], True) is None:
+            raise Exception('gettxout')
 
         tx_data = self._wallet.get_blockchain_state().get_raw(params['txhash'])
         pycoin_tx = pycoin_txcons.deserialize(tx_data.decode('hex'))
         tx_out = pycoin_tx.txs_out[params['outindex']]
-        assert script_to_raw_address(tx_out.script) == hash160(params['pubkey'].decode('hex'))
+        if script_to_raw_address(tx_out.script) != hash160(params['pubkey'].decode('hex')):
+            raise Exception('script_to_raw_address')
 
         publicPair = sec_to_public_pair(params['pubkey'].decode('hex'))
         data = int((hash160(str(params['data']) + params['sign']['salt'])).encode('hex'), 16)
-        assert ecdsa.verify(ecdsa.generator_secp256k1, publicPair, data, params['sign']['sign']) == True
+        if not ecdsa.verify(ecdsa.generator_secp256k1, publicPair, data, params['sign']['sign']):
+            raise Exception('ecdsa.verify')
 
         return public_pair_to_bitcoin_address(publicPair, compressed=False, is_test=self._isTestNet)
 
@@ -94,17 +98,29 @@ serverWallet = None
 class BuildHTTPRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     def add_message(self, params):
         global serverWallet, messageStore
-        address = serverWallet.check_request(params)
-        self.send_response(200)
-        self.end_headers()
-        self.wfile.write(messageStore.add_message(params['color_set'], address, params['data']))
+        try:
+            address = serverWallet.check_request(params)
+        except Exception as e:
+            self.send_response(400)
+            self.end_headers()
+            self.wfile.write(str(e))
+        else:
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(messageStore.add_message(params['color_set'], address, params['data']))
 
     def get_messages(self, params):
         global serverWallet, messageStore
-        serverWallet.check_request(params)
-        self.send_response(200)
-        self.end_headers()
-        self.wfile.write(messageStore.get_messages(params['color_set'], params['data']))
+        try:
+            serverWallet.check_request(params)
+        except Exception as e:
+            self.send_response(400)
+            self.end_headers()
+            self.wfile.write(str(e))
+        else:
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(messageStore.get_messages(params['color_set'], params['data']))
 
     def do_POST(self):
         length = int(self.headers.getheader('content-length'))

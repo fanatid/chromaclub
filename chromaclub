@@ -14,7 +14,6 @@ from chromaclub_gui.qt import QtUI
 
 
 def get_default_config_dir():
-    config_dir = "chromaclub-" + clubAsset['monikers'][0]
     if platform.system() in ('Windows', 'Microsoft'):
         appDataPath = os.environ.get("APPDATA")
         if not appDataPath:
@@ -23,11 +22,11 @@ def get_default_config_dir():
             appDataReg = _winreg.QueryValueEx(hkey, "AppData")
             appDataPath = appDataReg[0]
             _winreg.CloseKey(hkey)
-        return os.path.join(appDataPath, config_dir)
+        return os.path.join(appDataPath, "chromaclub")
     else:
         from xdg.BaseDirectory import save_config_path
         try:
-            return save_config_path(config_dir)
+            return save_config_path("chromaclub")
         except OSError as e:
             log.error("Unable to use default config directory, exiting... (%s)", e)
             sys.exit(1)
